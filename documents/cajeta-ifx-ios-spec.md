@@ -37,3 +37,43 @@ overrides). Umbrella design: the cajeta repo's `documents/cajeta-gfx/cajeta-gfx-
   §9.4 binding model).
 - Contract: `cajeta.ifx` — `Backend` / `WindowBackend` / `AudioBackend` / `InputBackend`.
 - Selector: the `cajeta-ifx-backend` melt (target → backend).
+
+---
+
+## Appendix A — Vendor SDK details (2025-2026 research)
+
+### Binding: Objective-C runtime everywhere (only Core Audio is C)
+**UIKit, GameController, AVFoundation, MetalKit, QuartzCore are Obj-C/Swift only.** Only **Core
+Audio + AudioToolbox** expose C. → This backend ships an **Obj-C/Obj-C++ (`.m`) shim** (`extern "C"`)
+for the UIKit window/scene/view + `CAMetalLayer` bring-up, touch + GameController, and the
+`AVAudioSession` layer; binds Core Audio / `RemoteIO` directly via C for the low-latency mixer.
+(Direct `objc_msgSend` is possible but brittle: arm64 has no variadic `objc_msgSend` — every call
+site must be cast to its concrete prototype.)
+
+### SDK reference
+| Domain | Framework | C-ABI? | Notes | Deprecated |
+|---|---|---|---|---|
+| Window/surface | **UIKit** `UIWindow`/`UIView`/`UIViewController` (single fullscreen) + `CAMetalLayer` (override `layerClass`) or **MTKView**; **`UIScene`/`UISceneDelegate` MANDATORY** | Obj-C (shim) | `CADisplayLink` pacing (120 Hz ProMotion); `drawableSize` = `UIScreen.nativeScale` | OpenGL ES (iOS 12) |
+| Surface (Vulkan) | **MoltenVK** `VK_EXT_metal_surface` (`CAMetalLayer*`) | C interop | Vulkan 1.4 subset, `VK_KHR_portability_subset` | `VK_MVK_ios_surface` |
+| Input | **UIKit touch** (`UITouch`/`UIGestureRecognizer`) primary; **GameController** optional (must stay playable touch-only); **`GCVirtualController`** on-screen pad (iOS 15+) | Obj-C (shim) | force/Pencil via `UITouch`; gamepad optional-by-policy | — |
+| Audio | **`AVAudioSession`** (mandatory: category/interruptions/route changes) + **Core Audio / RemoteIO** (C, low-latency, output+capture) | session=Obj-C, IO=**C** | mic needs `NSMicrophoneUsageDescription` + grant | OpenAL |
+
+### Capability support & gaps (vs spec §9.7) — diverges from macOS
+- **No real windows** → the contract collapses "window" to one fullscreen surface + safe-area
+  insets + orientation; **multi-window/positioning/warp = n/a**.
+- **Touch is the floor; keyboard/mouse optional/absent**; physical gamepad optional → **`supports()`**
+  drives this; provide `GCVirtualController` or engine-drawn on-screen controls.
+- **OS-owned, interruptible audio (`AVAudioSession`)** → must handle interruption (calls/Siri — and
+  the "interruption ended" notification is **not guaranteed**, resume defensively), route changes,
+  and `AVAudioEngineConfigurationChange` (rebuild graph). These map to `ifx`'s portable audio-route
+  + lifecycle events.
+- **Tight lifecycle/sandbox** → release drawable, pause `CADisplayLink`, stop audio on background;
+  recreate on foreground → `ifx` surface-lost/recreated events. **UIScene adoption mandatory** with
+  the iOS 26/27 SDK (verify exact enforced SDK at implementation time).
+- **Floor: iOS 13+ (15+ recommended).** No native Vulkan (MoltenVK only).
+
+### References
+- UIKit/UIScene: https://developer.apple.com/documentation/uikit/uiscene · CAMetalLayer: https://developer.apple.com/documentation/quartzcore/cametallayer
+- GameController/GCVirtualController: https://developer.apple.com/documentation/gamecontroller/gcvirtualcontroller
+- AVAudioSession: https://developer.apple.com/documentation/avfaudio/avaudiosession · Core Audio: https://developer.apple.com/documentation/coreaudio
+- MoltenVK `VK_EXT_metal_surface`: https://github.com/KhronosGroup/MoltenVK

@@ -51,3 +51,37 @@ iOS window creation via UIKit (UIView + CAMetalLayer), producing the opaque `Sur
 - Gated on the stdlib `cajeta.ifx` contract landing (`runtime/src/cajeta/ifx/`).
 - The Surface/WSI hand-off is gated on the gfx swapchain (`cajeta.gpu.gfx`, spec Part GP-1 §4.2).
 - Versioned independently of the other backends (own iOS API cadence).
+
+---
+
+## Appendix A — Binding & capability-gap work (from vendor research)
+
+### 5. Binding (Objective-C shim + C audio)
+   **TDD**
+   a. [ ] The shim creates the `UIScene`/`UIWindow`/`UIView` + `CAMetalLayer` fullscreen surface on
+      the main thread; touch + GameController events marshal to C.
+
+   **Deliverables**
+   a. [ ] Obj-C (`.m`) shim: **UIScene/UISceneDelegate** lifecycle, UIKit view + `CAMetalLayer`,
+      `UITouch`/gestures, GameController + `GCVirtualController`, and the `AVAudioSession` layer.
+   b. [ ] Direct C FFI for Core Audio / `RemoteIO` (low-latency output + capture).
+   c. [ ] MoltenVK `VK_EXT_metal_surface` from the `CAMetalLayer`.
+
+   **Acceptance Criteria**
+   a. [ ] Renders fullscreen via the shim; UIScene adopted (won't-launch deadline met); only C
+      crosses into Cajeta.
+
+### 6. Capability gaps & fallbacks (vs spec §9.7)
+   **TDD**
+   a. [ ] Audio interruption (begin/end-not-guaranteed) and route-change → defensive resume + graph
+      rebuild; surface-lost/recreated on background/foreground.
+
+   **Deliverables**
+   a. [ ] collapse "window" → single fullscreen surface + safe-area/orientation; touch floor +
+      optional gamepad via `supports()`; `GCVirtualController` / engine-drawn controls.
+   b. [ ] `AVAudioSession` category/interruption/route handling mapped to `ifx` audio-route +
+      lifecycle events; mic permission via the contract's permission state.
+
+   **Acceptance Criteria**
+   a. [ ] Playable touch-only; audio survives a phone-call interruption + headphone unplug; app
+      resumes cleanly from background (drawable + audio recreated).
