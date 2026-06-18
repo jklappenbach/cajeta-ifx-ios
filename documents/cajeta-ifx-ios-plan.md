@@ -85,3 +85,29 @@ iOS window creation via UIKit (UIView + CAMetalLayer), producing the opaque `Sur
    **Acceptance Criteria**
    a. [ ] Playable touch-only; audio survives a phone-call interruption + headphone unplug; app
       resumes cleanly from background (drawable + audio recreated).
+
+---
+
+## Appendix B — Interop implementation (Obj-C)
+
+### 7. Obj-C runtime FFI + clang shim
+   **TDD**
+   a. [ ] `UIApplicationMain` (from the shim) brings up a `UIScene` + `CAMetalLayer` and calls back
+      into Cajeta on the main thread.
+   b. [ ] An `AVAudioSession` interruption notification (block observer in the shim) fires the
+      `ifx` audio-interrupt event.
+
+   **Deliverables**
+   a. [ ] `@Native` objc runtime core (as macOS §7): typed `objc_msgSend`, selectors, retain/release,
+      autorelease pools, runtime delegates (`UIApplicationDelegate`/`UISceneDelegate`).
+   b. [ ] a (larger) `.m` shim: `UIApplicationMain` bootstrap, UIScene/UIView/`CAMetalLayer`,
+      `CADisplayLink`, GameController + `AVAudioSession` blocks → C callbacks.
+   c. [ ] direct C FFI for Core Audio / `RemoteIO`.
+
+   **Deliverables (build)**
+   d. [ ] build-tool: compile `.m` with the iOS SDK sysroot; assemble + code-sign the `.app`
+      (Info.plist `UIApplicationSceneManifest`, `NSMicrophoneUsageDescription`).
+
+   **Acceptance Criteria**
+   a. [ ] Renders fullscreen, survives interruption/route-change + background/foreground via the
+      shim's bridged events; only C crosses into Cajeta.

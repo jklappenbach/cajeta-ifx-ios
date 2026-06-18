@@ -77,3 +77,41 @@ site must be cast to its concrete prototype.)
 - GameController/GCVirtualController: https://developer.apple.com/documentation/gamecontroller/gcvirtualcontroller
 - AVAudioSession: https://developer.apple.com/documentation/avfaudio/avaudiosession · Core Audio: https://developer.apple.com/documentation/coreaudio
 - MoltenVK `VK_EXT_metal_surface`: https://github.com/KhronosGroup/MoltenVK
+
+---
+
+## Appendix B — Interop mechanism (Obj-C via C runtime + clang shim)
+
+**Feasibility: yes** — identical mechanism to macOS (Appendix B there), via `libobjc`'s C ABI bound
+through Cajeta `@Native`. iOS-specific notes:
+
+### Direct `libobjc` FFI (floor)
+Same as macOS: typed `objc_msgSend` casts (**arm64 only on device** → always `objc_msgSend`;
+the simulator is x86_64/arm64), interned selectors/classes, explicit `objc_retain`/`release`/
+autorelease pools, runtime-built delegates (`UIApplicationDelegate`, `UISceneDelegate`,
+`UIGestureRecognizer` targets) via `objc_allocateClassPair` + `class_addMethod`.
+
+### Clang `.m` shim (the larger surface on iOS)
+The shim is **bigger here** because more of iOS is Obj-C-only and lifecycle-driven. It owns:
+- **`UIApplicationMain(argc, argv, nil, delegateClassName)`** — a plain C entry point that never
+  returns and installs the run loop; pass a runtime-registered (or shim-defined) delegate class.
+- **`UIScene`/`UISceneDelegate`** bring-up + the `UIWindow`/`UIView` + `CAMetalLayer` fullscreen
+  surface (override `layerClass`), `CADisplayLink` pacing.
+- **Blocks** — GameController `valueChangedHandler`, AVFoundation completion handlers,
+  `AVAudioSession` notification observers (interruption/route-change).
+- **`AVAudioSession`** category/activation + interruption/route/config-change notifications → bridged
+  to C callbacks that drive `ifx`'s audio-route + lifecycle events.
+
+Direct C FFI for **Core Audio / `RemoteIO`** (low-latency output+capture) — no shim.
+Link: `clang -fobjc-arc`, `-framework UIKit -framework GameController -framework AVFoundation
+-framework QuartzCore -framework Metal`.
+
+### Build/packaging
+iOS app bundle (Info.plist with `UIApplicationSceneManifest`, `NSMicrophoneUsageDescription`),
+code-signing + provisioning. The cajeta build tool must compile the `.m` shim with the iOS SDK
+sysroot and assemble/sign the `.app` — the concrete toolchain task behind the feasibility question.
+
+### Sources
+- objc runtime / msgSend (see macOS Appendix B sources)
+- `UIApplicationMain`: https://developer.apple.com/documentation/uikit/uiapplicationmain
+- Block ABI: https://clang.llvm.org/docs/Block-ABI-Apple.html
