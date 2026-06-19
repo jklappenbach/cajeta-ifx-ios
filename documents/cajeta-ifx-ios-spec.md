@@ -69,7 +69,7 @@ site must be cast to its concrete prototype.)
   + lifecycle events.
 - **Tight lifecycle/sandbox** → release drawable, pause `CADisplayLink`, stop audio on background;
   recreate on foreground → `ifx` surface-lost/recreated events. **UIScene adoption mandatory** with
-  the iOS 26/27 SDK (verify exact enforced SDK at implementation time).
+  the **iOS 27 SDK** (deprecation warnings begin in iOS 26; verified 2026-06-19).
 - **Floor: iOS 13+ (15+ recommended).** No native Vulkan (MoltenVK only).
 
 ### References
